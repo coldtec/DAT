@@ -1,0 +1,43 @@
+<!doctype html><html lang="de-CH"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>DAT Viewer</title><style>
+:root{font-family:Inter,system-ui,-apple-system,Segoe UI,sans-serif;color:#182438;background:#f6f8fb}*{box-sizing:border-box}body{margin:0;padding:44px 20px}.wrap{max-width:980px;margin:auto}h1{font-size:25px;letter-spacing:-.7px;margin:0 0 24px}h2{font-size:17px;margin:0}.drop{display:flex;width:100%;min-height:180px;flex-direction:column;align-items:center;justify-content:center;gap:9px;text-align:center;border:2px dashed #b9c7d8;border-radius:18px;background:#fff;cursor:pointer;transition:.15s;padding:24px}.drop:hover,.drop.over{border-color:#3c7be6;background:#f0f6ff}.drop strong{font-size:17px}.drop small{font-size:13px;color:#718096}.drop .ico{font-size:32px}input[type=file]{display:none}.panel{background:#fff;border:1px solid #e5eaf0;border-radius:16px;padding:24px;margin-top:18px;box-shadow:0 5px 22px #162d4706}.hidden{display:none!important}.top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.tag{background:#edf4ff;color:#2364c8;border-radius:8px;padding:7px 10px;font-size:12px;overflow-wrap:anywhere}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:20px}.field{background:#f7f9fc;border-radius:10px;padding:14px;min-width:0}.field span{display:block;font-size:12px;color:#718096;margin-bottom:6px}.field b{font-size:15px;overflow-wrap:anywhere}.tablewrap{overflow:auto}table{border-collapse:collapse;width:100%;min-width:720px}th,td{padding:13px;text-align:left;border-bottom:1px solid #edf0f4;font-size:13px}th{color:#65758b;background:#f7f9fc;font-size:12px}button{border:1px solid #d7e0ea;background:white;border-radius:9px;padding:9px 12px;cursor:pointer;font-weight:600;color:#34445b}.muted{color:#718096;font-size:13px}.error{color:#bd3028;margin-top:12px;font-size:13px}details{margin-top:12px}summary{cursor:pointer;font-weight:600;font-size:13px}@media(max-width:680px){body{padding:24px 14px}.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.panel{padding:16px}}@media(max-width:440px){.grid{grid-template-columns:1fr}}
+.orders{display:grid;gap:16px;margin-top:18px}.order-card{margin-top:0}.order-card h2{font-size:17px}.summaryline{color:#718096;font-size:13px;margin-top:6px}.order-card .grid{margin-top:16px}.order-card .tablewrap{margin-top:18px}.stats{margin-top:18px;font-size:14px;color:#52647a}.drop{min-height:145px}.filetag{font-size:12px;color:#60718a;overflow-wrap:anywhere}.empty{padding:20px;color:#718096}</style></head><body><main class="wrap"><h1>DAT Viewer</h1><label class="drop" id="drop"><span class="ico">📄</span><strong>DAT-Dateien hier ablegen</strong><small>oder klicken und Dateien auswählen</small><input id="file" type="file" multiple accept=".dat,.txt,text/plain"></label><div id="error" class="error" role="alert"></div><div id="stats" class="stats hidden"></div><section id="orders" class="orders"></section></main><script>
+const $=id=>document.getElementById(id), drop=$('drop'),input=$('file');
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const value=(a,i)=>a?.[i]?.trim()||'–';
+const field=(label,val)=>`<div class="field"><span>${esc(label)}</span><b>${esc(val||'–')}</b></div>`;
+function parse(text,name){
+ const records=text.replace(/^\uFEFF/,'').split(/\r?\n/).map(s=>s.trim()).filter(Boolean).map(s=>s.split('$'));
+ const orders=[];let current=null,header=null;
+ for(const r of records){
+  const kind=r[0]?.trim();
+  if(kind==='SA01'){header=r;current=null}
+  else if(kind==='SA02'){
+   current={header,order:r,lines:[],filename:name};orders.push(current);
+  }else if(kind==='SA10'){
+   if(!current){current={header,order:null,lines:[],filename:name};orders.push(current)}
+   current.lines.push(r);
+  }else if(kind==='SA99'){current=null}
+ }
+ if(!orders.length)throw Error('Keine Bestellungen (SA02/SA10) gefunden');
+ return orders;
+}
+function render(o){
+ const r=o.order,h=o.header,lines=o.lines;
+ const fields=[['Bestellnummer',value(r,1)],['Datum',value(h,2)],['Kunde / Empfänger',value(r,4)],['Strasse',value(r,6)],['PLZ / Ort',value(r,7)],['Land',value(r,8)],['Rechnungsadresse',value(r,16)],['Adresse',value(r,17)+' · '+value(r,18)],['Referenz',value(r,2)]];
+ return `<article class="panel order-card"><div class="top"><div><h2>Bestellung ${esc(value(r,1))}</h2><div class="summaryline">${esc(value(r,4))} · ${esc(value(h,2))} · ${lines.length} Artikelposition(en)</div></div><span class="filetag">${esc(o.filename)}</span></div><div class="grid">${fields.map(x=>field(...x)).join('')}</div><div class="tablewrap"><table><thead><tr><th>EAN</th><th>Artikelnummer</th><th>Bezeichnung</th><th>Menge</th><th>Info</th><th>Datum</th><th>Wert 1*</th><th>Wert 2*</th></tr></thead><tbody>${lines.length?lines.map(l=>`<tr>${[2,3,5,6,7,8,9,10].map(i=>`<td>${esc(value(l,i))}</td>`).join('')}</tr>`).join(''):'<tr><td colspan="8">Keine Artikel vorhanden</td></tr>'}</tbody></table></div><div class="muted" style="margin-top:12px">* Zahlenfelder ohne bestätigte Preiszuordnung.</div></article>`;
+}
+async function load(files){
+ if(!files.length)return;
+ const all=[],errors=[];
+ for(const f of files){try{const text=new TextDecoder('utf-8',{fatal:true}).decode(await f.arrayBuffer());all.push(...parse(text,f.name))}catch(e){errors.push(f.name+': '+e.message)}}
+ $('orders').innerHTML=all.map(render).join('');
+ $('stats').textContent=all.length+' Bestellung(en) aus '+files.length+' Datei(en)';
+ $('stats').classList.toggle('hidden',!all.length);
+ $('error').textContent=errors.join(' | ');
+ input.value='';
+}
+input.addEventListener('change',e=>load([...e.target.files]));
+for(const ev of ['dragenter','dragover'])drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('over')});
+for(const ev of ['dragleave','drop'])drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('over')});
+drop.addEventListener('drop',e=>load([...e.dataTransfer.files]));
+</script></body></html>
